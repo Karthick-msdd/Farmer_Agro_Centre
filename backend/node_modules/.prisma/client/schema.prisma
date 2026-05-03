@@ -1,0 +1,383 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FARMER
+  AGROCENTER
+  SUPPLIER
+  AGRONOMIST
+  ADMIN
+  AGRI_OFFICER
+  MARKET_ANALYST
+  SUPPORT_STAFF
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  CREATED
+  CONFIRMED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+  COD
+}
+
+enum AdvisoryStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  email       String?  @unique
+  phone       String?  @unique
+  password    String?
+  role        UserRole @default(FARMER)
+  isActive    Boolean  @default(true)
+  isAdmin     Boolean  @default(false)
+  adminLevel  Int?     // 1-5, higher number = more privileges
+  lastLogin   DateTime?
+  loginAttempts Int    @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farmer            Farmer?            @relation("FarmerToUser")
+  agroCenter        AgroCenter?        @relation("AgroCenterToUser")
+  supplier          Supplier?          @relation("SupplierToUser")
+  agronomist        Agronomist?        @relation("AgronomistToUser")
+  adminProfile      AdminProfile?      @relation("AdminToUser")
+  orders            Order[]
+  cartItems         CartItem[]
+  advisoryRequests  AdvisoryRequest[]
+  notifications     Notification[]
+  addresses         Address[]
+
+  @@map("users")
+}
+
+model AdminProfile {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @unique @db.ObjectId
+  department      String?
+  designation     String?
+  permissions     String[] // Array of permission strings
+  accessLevel     Int      @default(1) // 1-5 access levels
+  isSuperAdmin    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user User @relation("AdminToUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_profiles")
+}
+
+model Farmer {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @unique @db.ObjectId
+  age               Int?
+  gender            String?
+  address           String?
+  village           String?
+  district          String?
+  state             String?
+  farmSize          Float?
+  farmLocation      String?
+  farmLatitude      Float?
+  farmLongitude     Float?
+  cropTypes         String?   // JSON array of crop types
+  preferredLanguage String?   @default("English")
+  soilType          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  user User @relation("FarmerToUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("farmers")
+}
+
+model AgroCenter {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @unique @db.ObjectId
+  name        String
+  address     String
+  phone       String?
+  email       String?
+  licenseNo   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user     User      @relation("AgroCenterToUser", fields: [userId], references: [id], onDelete: Cascade)
+  orders   Order[]
+  products Product[]
+
+  @@map("agro_centers")
+}
+
+model Supplier {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  company   String
+  address   String
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user     User      @relation("SupplierToUser", fields: [userId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@map("suppliers")
+}
+
+model Agronomist {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @unique @db.ObjectId
+  qualification String?
+  specialization String?
+  experience  Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user              User               @relation("AgronomistToUser", fields: [userId], references: [id], onDelete: Cascade)
+  advisoryRequests  AdvisoryRequest[]
+
+  @@map("agronomists")
+}
+
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  parentId    String?  @db.ObjectId
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  supplierId  String?  @db.ObjectId
+  agroCenterId String? @db.ObjectId
+  categoryId  String   @db.ObjectId
+  title       String
+  description String?
+  price       Float
+  unit        String
+  sku         String?  @unique
+  images      String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  agroCenter  AgroCenter?  @relation(fields: [agroCenterId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inventory   InventoryItem[]
+  orderItems  OrderItem[]
+  cartItems   CartItem[]
+
+  @@map("products")
+}
+
+model InventoryItem {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId   String   @db.ObjectId
+  quantity    Int
+  batchNo     String?
+  expiryDate  DateTime?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("inventory_items")
+}
+
+model Address {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String   // HOME, WORK, OTHER
+  name      String
+  phone     String
+  address   String
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("addresses")
+}
+
+model CartItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  productId String   @db.ObjectId
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String        @db.ObjectId
+  agroCenterId  String?       @db.ObjectId
+  addressId     String        @db.ObjectId
+  status        OrderStatus   @default(CREATED)
+  totalAmount   Float
+  paymentStatus PaymentStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  user      User        @relation(fields: [userId], references: [id])
+  agroCenter AgroCenter? @relation(fields: [agroCenterId], references: [id])
+  address   Address     @relation(fields: [addressId], references: [id])
+  items     OrderItem[]
+  payment   Payment?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId   String   @db.ObjectId
+  productId String   @db.ObjectId
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("order_items")
+}
+
+model Payment {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  orderId         String          @unique @db.ObjectId
+  provider        PaymentProvider
+  amount          Float
+  status          PaymentStatus   @default(PENDING)
+  providerTxnId   String?
+  providerTxnData Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model AdvisoryRequest {
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String          @db.ObjectId
+  agronomistId  String?         @db.ObjectId
+  crop          String?
+  description   String
+  images        String[]
+  location      String?
+  status        AdvisoryStatus  @default(OPEN)
+  response      String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  user       User        @relation(fields: [userId], references: [id])
+  agronomist Agronomist? @relation(fields: [agronomistId], references: [id])
+
+  @@map("advisory_requests")
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  title     String
+  body      String
+  type      String   // ORDER, PAYMENT, ADVISORY, GENERAL
+  isRead    Boolean  @default(false)
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @db.ObjectId
+  action    String
+  resource  String
+  resourceId String? @db.ObjectId
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
